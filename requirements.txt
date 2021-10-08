@@ -1,2 +1,3 @@
+english-words>=1.0.4
 praw>=7.4.0
 pycoingecko>=2.2.0
