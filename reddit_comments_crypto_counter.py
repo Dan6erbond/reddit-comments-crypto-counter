@@ -25,23 +25,27 @@ def analyze_comments(url, cg_coins_list=None):
         cs = [*comments]
         comments = []
         for comment in cs:
+            tickers = set()
             if isinstance(comment, Comment):
                 comments_analyzed += 1
                 for match in ticker_re.finditer(comment.body):
-                    ticker = match.group(1).lower()
-                    if ticker in english_words_lower_set:
+                    ticker = match.group(1)
+                    ticker_lower = ticker.lower()
+                    if ticker in english_words_lower_set and ticker.upper() != ticker:
                         continue
-                    if ticker in cg_dict:
-                        if ticker in cryptos:
-                            cryptos[ticker] += 1
+                    if ticker_lower in cg_dict and ticker_lower not in tickers:
+                        if ticker_lower in cryptos:
+                            cryptos[ticker_lower] += 1
                         else:
-                            cryptos[ticker] = 1
+                            cryptos[ticker_lower] = 1
+                        tickers.add(ticker_lower)
                 for symbol, name in cg_dict.items():
-                    if name in comment.body.lower():
+                    if name in comment.body.lower() and ticker_lower not in tickers:
                         if symbol in cryptos:
                             cryptos[symbol] += 1
                         else:
                             cryptos[symbol] = 1
+                        tickers.add(ticker_lower)
             else:
                 forest: CommentForest = comment.comments()
                 forest.replace_more()
