@@ -12,8 +12,11 @@ def main(url: str, top: int = 100):
             break
         name = ""
         for coin in cg_coins_list:
+            if "Binance-Peg" in coin["name"]:
+                continue
             if ticker.lower() == coin["symbol"].lower():
                 name = coin["name"]
+                break
         print(f"{rank + 1}. {name} ({ticker.upper()}) - {count}")
         print()
     print(f"{comments_analyzed:,} comments analyzed.")
