@@ -47,9 +47,12 @@ def analyze_comments(url, cg_coins_list=None):
                             cryptos[symbol] = 1
                         tickers.add(ticker_lower)
             else:
-                forest: CommentForest = comment.comments()
-                forest.replace_more()
-                comments.extend(forest.list())
+                forest: Union[CommentForest, List[Comment]] = comment.comments()
+                if isinstance(forest, CommentForest):
+                    forest.replace_more()
+                    comments.extend(forest.list())
+                else:
+                    comments.extend(forest)
 
     ranked = sorted(cryptos.items(), key=lambda x: x[1], reverse=True)
     return ranked, comments_analyzed
