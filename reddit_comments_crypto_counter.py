@@ -10,7 +10,7 @@ from praw.reddit import Comment, Submission
 from coingecko import *
 
 reddit = praw.Reddit("CCC", user_agent="Reddit crypto comments ticker counter by Dan6erbond.")
-ticker_re = re.compile(r"\b([a-zA-Z]{3,5})\b")
+ticker_re = re.compile(r"\b([a-zA-Z]{2,5})\b")
 
 
 def analyze_comments(url, cg_coins_list=None):
@@ -40,12 +40,12 @@ def analyze_comments(url, cg_coins_list=None):
                             cryptos[ticker_lower] = 1
                         tickers.add(ticker_lower)
                 for symbol, name in cg_dict.items():
-                    if name in comment.body.lower() and ticker_lower not in tickers:
+                    if name in comment.body.lower() and symbol not in tickers:
                         if symbol in cryptos:
                             cryptos[symbol] += 1
                         else:
                             cryptos[symbol] = 1
-                        tickers.add(ticker_lower)
+                        tickers.add(symbol)
             else:
                 forest: CommentForest = comment.comments()
                 forest.replace_more()
