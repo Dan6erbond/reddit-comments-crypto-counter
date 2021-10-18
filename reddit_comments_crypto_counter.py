@@ -9,11 +9,10 @@ from praw.reddit import Comment, Submission
 
 from coingecko import *
 
-reddit = praw.Reddit("CCC", user_agent="Reddit crypto comments ticker counter by Dan6erbond.")
 ticker_re = re.compile(r"\b([a-zA-Z]{2,5})\b")
 
 
-def analyze_comments(url, cg_coins_list=None):
+def analyze_comments(reddit: praw.Reddit, url, cg_coins_list=None):
     cg_dict = get_symbols_names_dict(cg_coins_list)
     post: Submission = reddit.submission(url=url)
     comments: List[Union[Comment, MoreComments]] = post.comments.list()
