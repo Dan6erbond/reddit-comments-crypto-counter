@@ -37,9 +37,9 @@ $ python3 main.py --top=100 --url=https://www.reddit.com/r/CryptoCurrency/commen
     Ignore tickers that are common English words.
     Default: True
 
---no-english-words
+--no-ignore-english-words
     Do not ignore tickers that are common English words.
-    Default: True
+    Default: False
 ```
 
 ## Contributors
