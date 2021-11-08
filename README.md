@@ -16,6 +16,18 @@ Install the dependencies:
 $ pip3 install -r requirements.txt
 ```
 
+Create a `praw.ini` file as per the instructions from PRAW's [documentation](https://praw.readthedocs.io/en/stable/getting_started/configuration/prawini.html):
+
+```ini
+[CCC]
+username=username
+password=password
+client_id=client_id
+client_secret=client_secret
+```
+
+You can create a Reddit application [here](https://www.reddit.com/prefs/apps). Make sure it is a `script` type and the redirect URI is set to https://127.0.0.1/ or https://localhost/.
+
 Run the command:
 
 ```sh
@@ -37,9 +49,9 @@ $ python3 main.py --top=100 --url=https://www.reddit.com/r/CryptoCurrency/commen
     Ignore tickers that are common English words.
     Default: True
 
---no-english-words
+--no-ignore-english-words
     Do not ignore tickers that are common English words.
-    Default: True
+    Default: False
 ```
 
 ## Contributors

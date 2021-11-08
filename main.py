@@ -1,12 +1,13 @@
 import argparse
 
+import praw
 from coingecko import *
 from reddit_comments_crypto_counter import *
 
 
-def main(url: str, top: int = 100):
+def main(reddit: praw.Reddit, url: str, top: int = 100):
     cg_coins_list = get_cg_coins_list()
-    ranked, comments_analyzed = analyze_comments(url, cg_coins_list)
+    ranked, comments_analyzed = analyze_comments(reddit, url, cg_coins_list)
     for rank, (ticker, count) in enumerate(ranked):
         if rank > top - 1:
             break
@@ -36,4 +37,5 @@ parser.add_argument("--no-ignore-english-words", dest="ignore_english_words", ac
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    main(args.url, args.top)
+    reddit = praw.Reddit("CCC", user_agent="Reddit crypto comments ticker counter by Dan6erbond.")
+    main(reddit, args.url, args.top)
