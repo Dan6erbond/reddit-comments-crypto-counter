@@ -3,9 +3,8 @@ import argparse
 import praw
 from praw.reddit import Submission
 
-from coingecko import *
-from reddit_comments_crypto_counter import *
-from formatting import *
+from lib import *
+from lib.formatting import *
 
 
 def main(reddit: praw.Reddit, url: str, top: int = 100, markdown: bool = False):
