@@ -164,11 +164,12 @@ def analyze_database():
     Submission = Query()
     for doc in db.search(Submission.type == DocumentType.submission):
         threading.Thread(target=analyze_submission, args=(reddit.submission(doc["id"]), doc)).start()
+        time.sleep(10)  # Prevent rate limit
 
 
 def main():
-    logger.info("Analyzing database...")
-    analyze_database()
+    logger.info("Starting database thread...")
+    threading.Thread(target=analyze_database).start()
     logger.info("Starting comments thread...")
     threading.Thread(target=analyze_comments).start()
     logger.info("Starting inbox thread...")
