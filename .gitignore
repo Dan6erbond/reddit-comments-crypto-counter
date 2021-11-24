@@ -141,3 +141,7 @@ praw.ini
 
 # MacOS
 .DS_Store
+
+# Custom
+bot.txt
+crypto_counter_bot*.json
