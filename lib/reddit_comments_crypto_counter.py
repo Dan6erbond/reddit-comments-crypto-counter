@@ -6,7 +6,7 @@ from praw.models.comment_forest import CommentForest
 from praw.models.reddit.more import MoreComments
 from praw.reddit import Comment, Submission
 
-from coingecko import *
+from .coingecko import *
 
 ticker_re = re.compile(r"\b([a-zA-Z]{2,5})\b")
 
