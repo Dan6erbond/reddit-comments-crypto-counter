@@ -81,54 +81,60 @@ def create_submission(submission_id: str, return_submission: bool = False) -> Un
     return db.get(doc_id=doc_id) if return_submission else doc_id
 
 
-# Decorator that updates cg_coins_market and loops every 10 minutes
-def loop(time_interval: float = 60 * 10):
-    def decorator(func):
-        logger.info("Registering loop decorator...")
-        def wrapper(*args, **kwargs):
-            global cg_coins_market_last_updated, cg_coins_market
-            while True:
-                if not cg_coins_market_last_updated or datetime.now() - cg_coins_market_last_updated > timedelta(hours=1):
-                    cg_coins_market = get_cg_coins_markets()
-                    cg_coins_market_last_updated = datetime.now()
-
-                try:
-                    func(*args, **kwargs)
-                except Exception as e:
-                    logger.error(str(e))
-                time.sleep(time_interval)
-        return wrapper
-    return decorator
-
-
 def analyze_submissions():
     for submission in subreddits.stream.submissions(skip_existing=True):
         submission: Submission
+        # TODO: Check if submission is applicable for analysis
         threading.Thread(analyze_submission, args=(submission, cg_coins_market)).start()
 
 
-@loop()
 def analyze_submission(submission: Submission, db_submission: Document, parent_comment: Comment = None):
-    logger.info("Analyzing submission: " + submission.id)
-    ranked, _ = analyze_submission_comments(submission, cg_coins_market)
-    coin_mentions = sum(count for _, count in ranked)
+    global cg_coins_market_last_updated, cg_coins_market
+    while True:
+        created = datetime.utcfromtimestamp(submission.created_utc)
+        age = datetime.utcnow() - created
+        if age > timedelta(weeks=2):
+            break
+        elif age > timedelta(days=1):
+            time_interval = 1 * 60 * 60
+        elif age > timedelta(hours=4):
+            time_interval = 30 * 60
+        elif age > timedelta(hours=2):
+            time_interval = 20 * 60
+        elif age > timedelta(hours=1):
+            time_interval = 10 * 60
+        else:
+            time_interval = 5 * 60
 
-    top = 75 if coin_mentions > 75 else 50 if coin_mentions > 50 else 25 if coin_mentions > 25 else 10 if coin_mentions > 10 else min(
-        coin_mentions, 10)
-    comment_text: str
-    if ranked:
-        comment_text = f"I've analyzed the submission! These were the top {top} crypto mentions:\n\n" + \
-            get_markdown_table(ranked, cg_coins_market, top) + \
-            f"\n\nLast updated: {datetime.now().strftime('%m/%d/%Y, %H:%M:%S')}" + bot_disclaimer
-    else:
-        comment_text = "I've analyzed the submission! Unfortunately, at the current time, no results were found." + \
-            f"\n\nLast updated: {datetime.now().strftime('%m/%d/%Y, %H:%M:%S')}" + bot_disclaimer
-    if crypto_comments_id := db_submission.get("crypto_comments_id"):
-        comment = reddit.comment(crypto_comments_id)
-        comment.edit(comment_text)
-    else:
-        comment = submission.reply(comment_text) if not parent_comment else parent_comment.reply(comment_text)
-        db.update({"crypto_comments_id": comment.id}, doc_ids=[db_submission.doc_id])
+        try:
+            if not cg_coins_market_last_updated or datetime.now() - cg_coins_market_last_updated > timedelta(hours=1):
+                cg_coins_market = get_cg_coins_markets()
+                cg_coins_market_last_updated = datetime.now()
+
+            logger.info("Analyzing submission: " + submission.id)
+            ranked, _ = analyze_submission_comments(submission, cg_coins_market)
+            coin_mentions = sum(count for _, count in ranked)
+
+            top = 75 if coin_mentions > 75 else 50 if coin_mentions > 50 else 25 if coin_mentions > 25 else 10 if coin_mentions > 10 else min(
+                coin_mentions, 10)
+            comment_text: str
+            if ranked:
+                comment_text = f"I've analyzed the submission! These were the top {top} crypto mentions:\n\n" + \
+                    get_markdown_table(ranked, cg_coins_market, top) + \
+                    f"\n\nLast updated: {datetime.now().strftime('%m/%d/%Y, %H:%M:%S')}" + bot_disclaimer
+            else:
+                comment_text = "I've analyzed the submission! Unfortunately, at the current time, no results were found." + \
+                    f"\n\nLast updated: {datetime.now().strftime('%m/%d/%Y, %H:%M:%S')}" + bot_disclaimer
+            if crypto_comments_id := db_submission.get("crypto_comments_id"):
+                comment = reddit.comment(crypto_comments_id)
+                comment.edit(comment_text)
+            else:
+                comment = submission.reply(comment_text) if not parent_comment else parent_comment.reply(comment_text)
+                db.update({"crypto_comments_id": comment.id}, doc_ids=[db_submission.doc_id])
+        except Exception as e:
+            logger.error(str(e))
+        finally:
+            time.sleep(time_interval)
 
 
 def start_submission_thread(submission: Submission, parent_comment: Comment = None):
@@ -153,7 +159,7 @@ def analyze_comments():
 
 def analyze_mentions():
     for mention in reddit.inbox.stream(skip_existing=True):
-        if type(mention) is Comment:
+        if isinstance(mention, Comment):
             mention: Comment
             if f"u/{reddit.user.me().name.lower()}" in mention.body.lower():
                 mention.mark_read()
