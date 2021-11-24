@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Tuple, Union
 
-from coingecko import *
+from .coingecko import *
 
 
 def get_markdown_table(ranked: List[Tuple[str, int]],
