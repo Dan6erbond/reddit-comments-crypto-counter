@@ -109,9 +109,14 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
 
         created = datetime.utcfromtimestamp(submission.created_utc)
         age = datetime.utcnow() - created
+
         if age > timedelta(weeks=2):
+            logger.warn(
+                f"Submission {submission.id} is too old to handle, skipping...")
+            db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
-        elif age > timedelta(days=1):
+
+        if age > timedelta(days=1):
             time_interval = 1 * 60 * 60
         elif age > timedelta(hours=4):
             time_interval = 30 * 60
