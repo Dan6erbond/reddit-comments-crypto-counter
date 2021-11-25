@@ -15,6 +15,7 @@ from lib.formatting import get_markdown_table
 from praw.reddit import Comment, Submission
 from tinydb import Query, TinyDB
 from tinydb.table import Document
+from tinyrecord import transaction
 
 reddit = praw.Reddit("CCC", user_agent="Reddit crypto comments ticker counter by /u/Dan6erbond.")
 reddit.validate_on_submit = True
@@ -70,17 +71,18 @@ def get_submission(submission_id: str) -> Document:
 
 
 @overload
-def create_submission(submission_id: str, return_submission: Literal[False]) -> int: ...
+def create_submission(submission_id: str, return_submission: Literal[False]) -> None: ...
 @overload
 def create_submission(submission_id: str, return_submission: Literal[True]) -> Document: ...
 
 
-def create_submission(submission_id: str, return_submission: bool = False) -> Union[int, Document]:
-    doc_id = db.insert({
-        "id": submission_id,
-        "type": DocumentType.submission,
-    })
-    return db.get(doc_id=doc_id) if return_submission else doc_id
+def create_submission(submission_id: str, return_submission: bool = False) -> Union[None, Document]:
+    with transaction(db) as tr:
+        tr.insert({
+            "id": submission_id,
+            "type": DocumentType.submission,
+        })
+    return get_submission(submission_id) if return_submission else None
 
 
 def analyze_submissions():
@@ -96,12 +98,14 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
     while True:
         if submission.locked:
             logger.warn(f"Submission {submission.id} is locked, skipping...")
-            db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+            with transaction(db) as tr:
+                tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
         if submission.subreddit.user_is_banned:
             logger.warn(
                 f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}...")
-            db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+            with transaction(db) as tr:
+                tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
         if submission.num_comments < 1:
             logger.warn(f"Submission {submission.id} has no comments, skipping...")
@@ -113,7 +117,8 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
         if age > timedelta(weeks=2):
             logger.warn(
                 f"Submission {submission.id} is too old to handle, skipping...")
-            db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+            with transaction(db) as tr:
+                tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
 
         if age > timedelta(days=1):
@@ -151,7 +156,8 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
                 comment.edit(comment_text)
             else:
                 comment = submission.reply(comment_text) if not parent_comment else parent_comment.reply(comment_text)
-                db.update({"crypto_comments_id": comment.id}, doc_ids=[db_submission.doc_id])
+                with transaction(db) as tr:
+                    tr.update({"crypto_comments_id": comment.id}, doc_ids=[db_submission.doc_id])
         except Exception as e:
             logger.error(str(e))
         finally:

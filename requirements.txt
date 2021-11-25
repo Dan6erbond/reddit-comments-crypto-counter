@@ -2,3 +2,4 @@ english-words>=1.0.4
 praw>=7.5.0
 pycoingecko>=2.2.0
 tinydb>=4.5.2
+tinyrecord>=0.2.0
