@@ -47,6 +47,8 @@ bot_disclaimer = """\n\n
  Results may not be accurate.
  Please report any issues on my [GitHub](https://github.com/Dan6erbond/reddit-comments-crypto-counter)."""
 
+previous_submission_thread_started: datetime = None
+
 
 class DocumentType(str, Enum):
     submission = "submission"
@@ -138,16 +140,23 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
 
 
 def start_submission_thread(submission: Submission, parent_comment: Comment = None):
+    global previous_submission_thread_started
     if db_submission := get_submission(submission.id):
         if crypto_comments_id := db_submission.get("crypto_comments_id"):
-            crypto_comment = reddit.comment(crypto_comments_id)
-            parent_comment.reply(
-                "I've already analyzed this submission! " +
-                f"You can see the most updated results [here](https://reddit.com + {crypto_comment.permalink}).")
-            return
+            if parent_comment:
+                crypto_comment = reddit.comment(crypto_comments_id)
+                parent_comment.reply(
+                    "I've already analyzed this submission! " +
+                    f"You can see the most updated results [here](https://reddit.com + {crypto_comment.permalink}).")
+                return
     else:
         db_submission = create_submission(submission.id, True)
+
+    if previous_submission_thread_started and datetime.now() - previous_submission_thread_started < timedelta(seconds=10):
+        time.sleep(10)  # Wait 10 seconds before starting another thread to avoid rate limiting
+
     threading.Thread(target=analyze_submission, args=(submission, db_submission, parent_comment)).start()
+    previous_submission_thread_started = datetime.now()
 
 
 def analyze_comments():
@@ -169,8 +178,7 @@ def analyze_mentions():
 def analyze_database():
     Submission = Query()
     for doc in db.search(Submission.type == DocumentType.submission):
-        threading.Thread(target=analyze_submission, args=(reddit.submission(doc["id"]), doc)).start()
-        time.sleep(10)  # Prevent rate limit
+        start_submission_thread(reddit.submission(doc["id"]))
 
 
 def main():
