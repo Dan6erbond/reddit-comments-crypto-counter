@@ -173,7 +173,7 @@ def start_submission_thread(submission: Submission, db_submission: Document = No
                 parent_comment.reply(
                     "I've already analyzed this submission! " +
                     f"You can see the most updated results [here](https://reddit.com{crypto_comment.permalink}).")
-            return
+                return
     else:
         db_submission = create_submission(submission.id, True)
 
