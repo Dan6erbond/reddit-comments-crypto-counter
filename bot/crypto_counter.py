@@ -87,7 +87,7 @@ def analyze_submissions():
     for submission in subreddits.stream.submissions(skip_existing=True):
         submission: Submission
         # TODO: Check if submission is applicable for analysis
-        threading.Thread(analyze_submission, args=(submission, cg_coins_market)).start()
+        start_submission_thread(submission)
 
 
 def analyze_submission(submission: Submission, db_submission: Document, parent_comment: Comment = None):
