@@ -202,7 +202,8 @@ def analyze_mentions():
 
 def analyze_database():
     Submission = Query()
-    for doc in db.search((Submission.type == DocumentType.submission) & (Submission.ignore == False)):
+    for doc in db.search((Submission.type == DocumentType.submission) & (
+            (Submission.ignore == False) | ~(Submission.ignore.exists()))):
         start_submission_thread(reddit.submission(doc["id"]), db_submission=doc)
 
 
