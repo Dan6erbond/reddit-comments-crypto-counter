@@ -92,15 +92,21 @@ def analyze_submissions():
 
 def analyze_submission(submission: Submission, db_submission: Document, parent_comment: Comment = None):
     global cg_coins_market_last_updated, cg_coins_market
-    while True:
-        if submission.locked:
-            logger.warn(f"Submission {submission.id} is locked, skipping...")
-            db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
-            return
-        if submission.num_comments < 1:
-            logger.warn(f"Submission {submission.id} has no comments, skipping...")
-            return
 
+    if submission.locked:
+        logger.warn(f"Submission {submission.id} is locked, skipping...")
+        db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+        return
+    if submission.subreddit.user_is_banned:
+        logger.warn(
+            f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}...")
+        db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+        return
+    if submission.num_comments < 1:
+        logger.warn(f"Submission {submission.id} has no comments, skipping...")
+        return
+
+    while True:
         created = datetime.utcfromtimestamp(submission.created_utc)
         age = datetime.utcnow() - created
         if age > timedelta(weeks=2):
