@@ -97,25 +97,25 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
 
     while True:
         if submission.locked:
-            logger.warn(f"Submission {submission.id} is locked, skipping...")
+            logger.warning(f"Submission {submission.id} is locked, skipping...")
             with transaction(db) as tr:
                 tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
         if submission.subreddit.user_is_banned:
-            logger.warn(
+            logger.warning(
                 f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}...")
             with transaction(db) as tr:
                 tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
         if submission.num_comments < 1:
-            logger.warn(f"Submission {submission.id} has no comments, skipping...")
+            logger.warning(f"Submission {submission.id} has no comments, skipping...")
             return
 
         created = datetime.utcfromtimestamp(submission.created_utc)
         age = datetime.utcnow() - created
 
         if age > timedelta(weeks=2):
-            logger.warn(
+            logger.warning(
                 f"Submission {submission.id} is too old to handle, skipping...")
             with transaction(db) as tr:
                 tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
