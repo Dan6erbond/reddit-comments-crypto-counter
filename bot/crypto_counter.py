@@ -95,6 +95,7 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
     while True:
         if submission.locked:
             logger.warn(f"Submission {submission.id} is locked, skipping...")
+            db.update({"ignore": True}, doc_ids=[db_submission.doc_id])
             return
         created = datetime.utcfromtimestamp(submission.created_utc)
         age = datetime.utcnow() - created
@@ -142,9 +143,9 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
             time.sleep(time_interval)
 
 
-def start_submission_thread(submission: Submission, parent_comment: Comment = None):
+def start_submission_thread(submission: Submission, db_submission: Document = None, parent_comment: Comment = None):
     global previous_submission_thread_started
-    if db_submission := get_submission(submission.id):
+    if db_submission or (db_submission := get_submission(submission.id)):
         if crypto_comments_id := db_submission.get("crypto_comments_id"):
             if parent_comment:
                 crypto_comment = reddit.comment(crypto_comments_id)
@@ -166,7 +167,7 @@ def analyze_comments():
     for comment in subreddits.stream.comments(skip_existing=True):
         if any(mention.lower() in comment.body.lower()
                for mention in ["!CryptoMentions", "!CryptoCounter"]):
-            start_submission_thread(comment.submission, comment)
+            start_submission_thread(comment.submission, parent_comment=comment)
 
 
 def analyze_mentions():
@@ -175,13 +176,13 @@ def analyze_mentions():
             mention: Comment
             if f"u/{reddit.user.me().name.lower()}" in mention.body.lower():
                 mention.mark_read()
-                start_submission_thread(mention.submission, mention)
+                start_submission_thread(mention.submission, parent_comment=mention)
 
 
 def analyze_database():
     Submission = Query()
-    for doc in db.search(Submission.type == DocumentType.submission):
-        start_submission_thread(reddit.submission(doc["id"]))
+    for doc in db.search((Submission.type == DocumentType.submission) & (Submission.ignore == False)):
+        start_submission_thread(reddit.submission(doc["id"]), db_submission=doc)
 
 
 def main():
