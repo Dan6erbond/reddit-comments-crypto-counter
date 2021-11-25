@@ -201,6 +201,7 @@ def analyze_database():
 
 
 def main():
+    print("Starting Crypto Counter Bot...")
     logger.info("Starting database thread...")
     threading.Thread(target=analyze_database).start()
     logger.info("Starting comments thread...")
