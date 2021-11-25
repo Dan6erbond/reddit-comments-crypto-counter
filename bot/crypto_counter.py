@@ -93,10 +93,13 @@ def analyze_submissions():
 def analyze_submission(submission: Submission, db_submission: Document, parent_comment: Comment = None):
     global cg_coins_market_last_updated, cg_coins_market
     while True:
+        if submission.locked:
+            logger.warn(f"Submission {submission.id} is locked, skipping...")
+            return
         created = datetime.utcfromtimestamp(submission.created_utc)
         age = datetime.utcnow() - created
         if age > timedelta(weeks=2):
-            break
+            return
         elif age > timedelta(days=1):
             time_interval = 1 * 60 * 60
         elif age > timedelta(hours=4):
