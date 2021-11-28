@@ -21,7 +21,7 @@ from tinyrecord import transaction
 reddit = praw.Reddit("CCC", user_agent="Reddit crypto comments ticker counter by /u/Dan6erbond.")
 reddit.validate_on_submit = True
 # subreddits = reddit.multireddit("Dan6erbond", "crypto")
-subreddits = reddit.subreddit(["u_CryptoCounterBot", "Solana", "Algorand"].join("+"))
+subreddits = reddit.subreddit("+".join(["u_CryptoCounterBot", "Solana", "Algorand"]))
 
 db = TinyDB("crypto_counter_bot.json")
 
