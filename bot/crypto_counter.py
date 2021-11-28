@@ -5,6 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from enum import Enum
+from queue import Queue
 from typing import List, Literal, Union, overload
 
 import praw
@@ -48,7 +49,22 @@ bot_disclaimer = """\n\n
  Results may not be accurate.
  Please report any issues on my [GitHub](https://github.com/Dan6erbond/reddit-comments-crypto-counter)."""
 
-previous_submission_thread_started: datetime = None
+
+class CommentTaskAction(str, Enum):
+    edit = "edit"
+    reply = "reply"
+
+
+class CommentTask(TypedDict):
+    action: CommentTaskAction
+    edit_comment: Optional[Comment]
+    parent_comment: Optional[Comment]
+    parent_submission: Optional[Submission]
+    db_submission: Document
+    text: str
+
+
+comments_queue: Queue[CommentTask] = Queue()
 
 
 class DocumentType(str, Enum):
@@ -93,46 +109,46 @@ def analyze_submissions():
 
 
 def analyze_submission(submission: Submission, db_submission: Document, parent_comment: Comment = None):
-    global cg_coins_market_last_updated, cg_coins_market
+    global cg_coins_market_last_updated, cg_coins_market, comments_queue
 
     while True:
-        if submission.locked:
-            logger.warning(f"Submission {submission.id} is locked, skipping...")
-            with transaction(db) as tr:
-                tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
-            return
-        if submission.subreddit.user_is_banned:
-            logger.warning(
-                f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}...")
-            with transaction(db) as tr:
-                tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
-            return
-        if submission.num_comments < 1:
-            logger.warning(f"Submission {submission.id} has no comments, skipping...")
-            return
-
-        created = datetime.utcfromtimestamp(submission.created_utc)
-        age = datetime.utcnow() - created
-
-        if age > timedelta(weeks=2):
-            logger.warning(
-                f"Submission {submission.id} is too old to handle, skipping...")
-            with transaction(db) as tr:
-                tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
-            return
-
-        if age > timedelta(days=1):
-            time_interval = 1 * 60 * 60
-        elif age > timedelta(hours=4):
-            time_interval = 30 * 60
-        elif age > timedelta(hours=2):
-            time_interval = 20 * 60
-        elif age > timedelta(hours=1):
-            time_interval = 10 * 60
-        else:
-            time_interval = 5 * 60
-
         try:
+            if submission.locked:
+                logger.warning(f"Submission {submission.id} is locked, skipping...")
+                with transaction(db) as tr:
+                    tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+                return
+            if submission.subreddit.user_is_banned:
+                logger.warning(
+                    f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}...")
+                with transaction(db) as tr:
+                    tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+                return
+            if submission.num_comments < 1:
+                logger.warning(f"Submission {submission.id} has no comments, skipping...")
+                return
+
+            created = datetime.utcfromtimestamp(submission.created_utc)
+            age = datetime.utcnow() - created
+
+            if age > timedelta(weeks=2):
+                logger.warning(
+                    f"Submission {submission.id} is too old to handle, skipping...")
+                with transaction(db) as tr:
+                    tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
+                return
+
+            if age > timedelta(days=1):
+                time_interval = 1 * 60 * 60
+            elif age > timedelta(hours=4):
+                time_interval = 30 * 60
+            elif age > timedelta(hours=2):
+                time_interval = 20 * 60
+            elif age > timedelta(hours=1):
+                time_interval = 10 * 60
+            else:
+                time_interval = 5 * 60
+
             if not cg_coins_market_last_updated or datetime.now() - cg_coins_market_last_updated > timedelta(hours=1):
                 cg_coins_market = get_cg_coins_markets()
                 cg_coins_market_last_updated = datetime.now()
@@ -153,11 +169,20 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
                     f"\n\nLast updated: {datetime.now().strftime('%m/%d/%Y, %H:%M:%S')}" + bot_disclaimer
             if crypto_comments_id := db_submission.get("crypto_comments_id"):
                 comment = reddit.comment(crypto_comments_id)
-                comment.edit(comment_text)
+                comments_queue.put({
+                    "action": CommentTaskAction.edit,
+                    "edit_comment": comment,
+                    "db_submission": db_submission,
+                    "text": comment_text,
+                })
             else:
-                comment = submission.reply(comment_text) if not parent_comment else parent_comment.reply(comment_text)
-                with transaction(db) as tr:
-                    tr.update({"crypto_comments_id": comment.id}, doc_ids=[db_submission.doc_id])
+                comments_queue.put({
+                    "action": CommentTaskAction.reply,
+                    "parent_comment": parent_comment,
+                    "parent_submission": submission,
+                    "db_submission": db_submission,
+                    "text": comment_text,
+                })
         except Exception as e:
             logger.error(str(e))
         finally:
@@ -165,7 +190,6 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
 
 
 def start_submission_thread(submission: Submission, db_submission: Document = None, parent_comment: Comment = None):
-    global previous_submission_thread_started
     if db_submission or (db_submission := get_submission(submission.id)):
         if crypto_comments_id := db_submission.get("crypto_comments_id"):
             if parent_comment:
@@ -173,15 +197,12 @@ def start_submission_thread(submission: Submission, db_submission: Document = No
                 parent_comment.reply(
                     "I've already analyzed this submission! " +
                     f"You can see the most updated results [here](https://reddit.com{crypto_comment.permalink}).")
+                logging.warning(f"Submission {submission.id} has already been analyzed, skipping...")
                 return
     else:
         db_submission = create_submission(submission.id, True)
 
-    if previous_submission_thread_started and datetime.now() - previous_submission_thread_started < timedelta(seconds=10):
-        time.sleep(10)  # Wait 10 seconds before starting another thread to avoid rate limiting
-
     threading.Thread(target=analyze_submission, args=(submission, db_submission, parent_comment)).start()
-    previous_submission_thread_started = datetime.now()
 
 
 def analyze_comments():
@@ -207,6 +228,21 @@ def analyze_database():
         start_submission_thread(reddit.submission(doc["id"]), db_submission=doc)
 
 
+def comment_worker(comment_queue: Queue[CommentTask]):
+    while True:
+        comment_task = comment_queue.get()
+        if comment_task["action"] == CommentTaskAction.edit:
+            comment_task["edit_comment"].edit(comment_task["text"])
+        elif comment_task["action"] == CommentTaskAction.reply:
+            comment: Comment = comment_task["parent_comment"].reply(
+                comment_task["text"]) if comment_task["parent_comment"] else comment_task["parent_submission"].reply(
+                comment_task["text"])
+            with transaction(db) as tr:
+                tr.update({"crypto_comments_id": comment.id}, doc_ids=[comment_task["db_submission"].doc_id])
+        comment_queue.task_done()
+        time.sleep(5)  # Wait 5 seconds before reading another item to avoid rate limiting
+
+
 def main():
     print("Starting Crypto Counter Bot...")
     logger.info("Starting database thread...")
@@ -216,6 +252,8 @@ def main():
     logger.info("Starting inbox thread...")
     threading.Thread(target=analyze_mentions).start()
     # threading.Thread(target=analyze_submissions).start()
+    logger.info("Starting comment worker...")
+    threading.Thread(target=comment_worker, daemon=True).start()
 
 
 parser = argparse.ArgumentParser(description="Scan Reddit comment trees for crypto coin tickers and names.")
