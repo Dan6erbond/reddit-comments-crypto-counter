@@ -58,13 +58,9 @@ class CommentTaskAction(str, Enum):
 class CommentTask(TypedDict):
     action: CommentTaskAction
     edit_comment: Optional[Comment]
-    parent_comment: Optional[Comment]
-    parent_submission: Optional[Submission]
+    reply_to: Optional[Union[Comment, Submission]]
     db_submission: Document
     text: str
-
-
-comments_queue: Queue[CommentTask] = Queue()
 
 
 class DocumentType(str, Enum):
@@ -101,15 +97,18 @@ def create_submission(submission_id: str, return_submission: bool = False) -> Un
     return get_submission(submission_id) if return_submission else None
 
 
-def analyze_submissions():
+def analyze_submissions(comments_queue: Queue[CommentTask]):
     for submission in subreddits.stream.submissions(skip_existing=True):
         submission: Submission
         # TODO: Check if submission is applicable for analysis
-        start_submission_thread(submission)
+        start_submission_thread(submission, comments_queue)
 
 
-def analyze_submission(submission: Submission, db_submission: Document, parent_comment: Comment = None):
-    global cg_coins_market_last_updated, cg_coins_market, comments_queue
+def analyze_submission(submission: Submission,
+                       comments_queue: Queue[CommentTask],
+                       db_submission: Document,
+                       parent_comment: Comment = None):
+    global cg_coins_market_last_updated, cg_coins_market
 
     while True:
         try:
@@ -169,27 +168,33 @@ def analyze_submission(submission: Submission, db_submission: Document, parent_c
                     f"\n\nLast updated: {datetime.now().strftime('%m/%d/%Y, %H:%M:%S')}" + bot_disclaimer
             if crypto_comments_id := db_submission.get("crypto_comments_id"):
                 comment = reddit.comment(crypto_comments_id)
-                comments_queue.put({
-                    "action": CommentTaskAction.edit,
-                    "edit_comment": comment,
-                    "db_submission": db_submission,
-                    "text": comment_text,
-                })
+                comments_queue.put(
+                    CommentTask(
+                        action=CommentTaskAction.edit,
+                        edit_comment=comment,
+                        db_submission=db_submission,
+                        text=comment_text
+                    )
+                )
             else:
-                comments_queue.put({
-                    "action": CommentTaskAction.reply,
-                    "parent_comment": parent_comment,
-                    "parent_submission": submission,
-                    "db_submission": db_submission,
-                    "text": comment_text,
-                })
+                comments_queue.put(
+                    CommentTask(
+                        action=CommentTaskAction.reply,
+                        reply_to=parent_comment or submission,
+                        db_submission=db_submission,
+                        text=comment_text
+                    )
+                )
         except Exception as e:
             logger.error(str(e))
         finally:
             time.sleep(time_interval)
 
 
-def start_submission_thread(submission: Submission, db_submission: Document = None, parent_comment: Comment = None):
+def start_submission_thread(submission: Submission,
+                            comments_queue: Queue[CommentTask],
+                            db_submission: Document = None,
+                            parent_comment: Comment = None):
     if db_submission or (db_submission := get_submission(submission.id)):
         if crypto_comments_id := db_submission.get("crypto_comments_id"):
             if parent_comment:
@@ -202,30 +207,36 @@ def start_submission_thread(submission: Submission, db_submission: Document = No
     else:
         db_submission = create_submission(submission.id, True)
 
-    threading.Thread(target=analyze_submission, args=(submission, db_submission, parent_comment)).start()
+    threading.Thread(
+        target=analyze_submission,
+        args=(
+            submission,
+            comments_queue,
+            db_submission,
+            parent_comment)).start()
 
 
-def analyze_comments():
+def analyze_comments(comments_queue: Queue[CommentTask]):
     for comment in subreddits.stream.comments(skip_existing=True):
         if any(mention.lower() in comment.body.lower()
                for mention in ["!CryptoMentions", "!CryptoCounter"]):
-            start_submission_thread(comment.submission, parent_comment=comment)
+            start_submission_thread(comment.submission, comments_queue, parent_comment=comment)
 
 
-def analyze_mentions():
+def analyze_mentions(comments_queue: Queue[CommentTask]):
     for mention in reddit.inbox.stream(skip_existing=True):
         if isinstance(mention, Comment):
             mention: Comment
             if f"u/{reddit.user.me().name.lower()}" in mention.body.lower():
                 mention.mark_read()
-                start_submission_thread(mention.submission, parent_comment=mention)
+                start_submission_thread(mention.submission, comments_queue, parent_comment=mention)
 
 
-def analyze_database():
+def analyze_database(comments_queue: Queue[CommentTask]):
     Submission = Query()
     for doc in db.search((Submission.type == DocumentType.submission) & (
             (Submission.ignore == False) | ~(Submission.ignore.exists()))):
-        start_submission_thread(reddit.submission(doc["id"]), db_submission=doc)
+        start_submission_thread(reddit.submission(doc["id"]), comments_queue, db_submission=doc)
 
 
 def comment_worker(comment_queue: Queue[CommentTask]):
@@ -234,9 +245,7 @@ def comment_worker(comment_queue: Queue[CommentTask]):
         if comment_task["action"] == CommentTaskAction.edit:
             comment_task["edit_comment"].edit(comment_task["text"])
         elif comment_task["action"] == CommentTaskAction.reply:
-            comment: Comment = comment_task["parent_comment"].reply(
-                comment_task["text"]) if comment_task["parent_comment"] else comment_task["parent_submission"].reply(
-                comment_task["text"])
+            comment: Comment = comment_task["reply_to"].reply(comment_task["text"])
             with transaction(db) as tr:
                 tr.update({"crypto_comments_id": comment.id}, doc_ids=[comment_task["db_submission"].doc_id])
         comment_queue.task_done()
@@ -245,15 +254,17 @@ def comment_worker(comment_queue: Queue[CommentTask]):
 
 def main():
     print("Starting Crypto Counter Bot...")
+    logger.info("Creating comments task queue...")
+    comments_queue: Queue[CommentTask][CommentTask] = Queue()
     logger.info("Starting database thread...")
-    threading.Thread(target=analyze_database).start()
+    threading.Thread(target=analyze_database, args=(comments_queue, )).start()
     logger.info("Starting comments thread...")
-    threading.Thread(target=analyze_comments).start()
+    threading.Thread(target=analyze_comments, args=(comments_queue, )).start()
     logger.info("Starting inbox thread...")
-    threading.Thread(target=analyze_mentions).start()
+    threading.Thread(target=analyze_mentions, args=(comments_queue, )).start()
     # threading.Thread(target=analyze_submissions).start()
     logger.info("Starting comment worker...")
-    threading.Thread(target=comment_worker, daemon=True).start()
+    threading.Thread(target=comment_worker, args=(comments_queue, ), daemon=True).start()
 
 
 parser = argparse.ArgumentParser(description="Scan Reddit comment trees for crypto coin tickers and names.")
