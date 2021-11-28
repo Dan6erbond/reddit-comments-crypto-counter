@@ -243,8 +243,11 @@ def comment_worker(comment_queue: Queue[CommentTask]):
     while True:
         comment_task = comment_queue.get()
         if comment_task["action"] == CommentTaskAction.edit:
+            logger.info(f"Editing comment {comment_task['edit_comment'].id}...")
             comment_task["edit_comment"].edit(comment_task["text"])
         elif comment_task["action"] == CommentTaskAction.reply:
+            logger.info(
+                f"Replying to {'comment' if isinstance(comment_task['reply_to'], Comment) else 'submission'} {comment_task['reply_to'].id}...")
             comment: Comment = comment_task["reply_to"].reply(comment_task["text"])
             with transaction(db) as tr:
                 tr.update({"crypto_comments_id": comment.id}, doc_ids=[comment_task["db_submission"].doc_id])
