@@ -50,6 +50,8 @@ bot_disclaimer = """\n\n
  Results may not be accurate.
  Please report any issues on my [GitHub](https://github.com/Dan6erbond/reddit-comments-crypto-counter)."""
 
+lock = threading.Lock()
+
 
 class CommentTaskAction(str, Enum):
     edit = "edit"
@@ -76,11 +78,12 @@ def initialize_test():
 
 
 def get_submission(submission_id: str) -> Document:
-    Submission = Query()
-    res: List[Document] = db.search(
-        (Submission.type == DocumentType.submission) & (
-            Submission.id == submission_id))
-    return res[0] if res else None
+    with lock:
+        Submission = Query()
+        res: List[Document] = db.search(
+            (Submission.type == DocumentType.submission) & (
+                Submission.id == submission_id))
+        return res[0] if res else None
 
 
 @overload
