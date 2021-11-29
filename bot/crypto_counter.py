@@ -247,8 +247,13 @@ def analyze_database(comments_queue: Queue[CommentTask]):
 
 
 def comment_worker(comment_queue: Queue[CommentTask]):
+    last_task_done: Optional[datetime] = None
     while True:
         comment_task = comment_queue.get()
+
+        if last_task_done:
+            time.sleep(max(0, 5 - (datetime.now() - last_task_done).total_seconds()))
+
         if comment_task["action"] == CommentTaskAction.edit:
             logger.info(f"Editing comment {comment_task['edit_comment'].id}.")
             comment_task["edit_comment"].edit(comment_task["text"])
@@ -259,7 +264,7 @@ def comment_worker(comment_queue: Queue[CommentTask]):
             with transaction(db) as tr:
                 tr.update({"crypto_comments_id": comment.id}, doc_ids=[comment_task["db_submission"].doc_id])
         comment_queue.task_done()
-        time.sleep(5)  # Wait 5 seconds before reading another item to avoid rate limiting
+        last_task_done = datetime.now()
 
 
 def main():
