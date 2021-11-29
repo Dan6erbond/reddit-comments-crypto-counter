@@ -107,12 +107,15 @@ def analyze_submissions(comments_queue: Queue[CommentTask]):
 
 def analyze_submission(submission: Submission,
                        comments_queue: Queue[CommentTask],
-                       db_submission: Document,
                        parent_comment: Comment = None):
     global cg_coins_market_last_updated, cg_coins_market
 
     while True:
         try:
+            db_submission = get_submission(submission.id)
+            if not db_submission:
+                logger.error(f"Submission {submission.id} not found in database.")
+                return
             if submission.locked:
                 logger.warning(f"Submission {submission.id} is locked, skipping.")
                 with transaction(db) as tr:
@@ -214,7 +217,6 @@ def start_submission_thread(submission: Submission,
         args=(
             submission,
             comments_queue,
-            db_submission,
             parent_comment)).start()
 
 
