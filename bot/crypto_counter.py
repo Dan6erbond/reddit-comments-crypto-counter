@@ -84,9 +84,9 @@ def get_submission(submission_id: str) -> Document:
 
 
 @overload
-def create_submission(submission_id: str, return_submission: Literal[False]) -> None: ...
+def create_submission(submission_id: str, return_submission: Literal[False]) -> None: .
 @overload
-def create_submission(submission_id: str, return_submission: Literal[True]) -> Document: ...
+def create_submission(submission_id: str, return_submission: Literal[True]) -> Document: .
 
 
 def create_submission(submission_id: str, return_submission: bool = False) -> Union[None, Document]:
@@ -114,18 +114,18 @@ def analyze_submission(submission: Submission,
     while True:
         try:
             if submission.locked:
-                logger.warning(f"Submission {submission.id} is locked, skipping...")
+                logger.warning(f"Submission {submission.id} is locked, skipping.")
                 with transaction(db) as tr:
                     tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
                 return
             if submission.subreddit.user_is_banned:
                 logger.warning(
-                    f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}...")
+                    f"Subreddit {submission.subreddit.display_name} is banned, skipping submission {submission.id}.")
                 with transaction(db) as tr:
                     tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
                 return
             if submission.num_comments < 1:
-                logger.warning(f"Submission {submission.id} has no comments, skipping...")
+                logger.warning(f"Submission {submission.id} has no comments, skipping.")
                 return
 
             created = datetime.utcfromtimestamp(submission.created_utc)
@@ -133,7 +133,7 @@ def analyze_submission(submission: Submission,
 
             if age > timedelta(weeks=2):
                 logger.warning(
-                    f"Submission {submission.id} is too old to handle, skipping...")
+                    f"Submission {submission.id} is too old to handle, skipping.")
                 with transaction(db) as tr:
                     tr.update({"ignore": True}, doc_ids=[db_submission.doc_id])
                 return
@@ -148,6 +148,7 @@ def analyze_submission(submission: Submission,
                 time_interval = 10 * 60
             else:
                 time_interval = 5 * 60
+            logger.info(f"Set time interval at {time_interval}.")
 
             if not cg_coins_market_last_updated or datetime.now() - cg_coins_market_last_updated > timedelta(hours=1):
                 cg_coins_market = get_cg_coins_markets()
@@ -203,7 +204,7 @@ def start_submission_thread(submission: Submission,
                 parent_comment.reply(
                     "I've already analyzed this submission! " +
                     f"You can see the most updated results [here](https://reddit.com{crypto_comment.permalink}).")
-                logging.warning(f"Submission {submission.id} has already been analyzed, skipping...")
+                logging.warning(f"Submission {submission.id} has already been analyzed, skipping.")
                 return
     else:
         db_submission = create_submission(submission.id, True)
@@ -244,11 +245,11 @@ def comment_worker(comment_queue: Queue[CommentTask]):
     while True:
         comment_task = comment_queue.get()
         if comment_task["action"] == CommentTaskAction.edit:
-            logger.info(f"Editing comment {comment_task['edit_comment'].id}...")
+            logger.info(f"Editing comment {comment_task['edit_comment'].id}.")
             comment_task["edit_comment"].edit(comment_task["text"])
         elif comment_task["action"] == CommentTaskAction.reply:
             logger.info(
-                f"Replying to {'comment' if isinstance(comment_task['reply_to'], Comment) else 'submission'} {comment_task['reply_to'].id}...")
+                f"Replying to {'comment' if isinstance(comment_task['reply_to'], Comment) else 'submission'} {comment_task['reply_to'].id}.")
             comment: Comment = comment_task["reply_to"].reply(comment_task["text"])
             with transaction(db) as tr:
                 tr.update({"crypto_comments_id": comment.id}, doc_ids=[comment_task["db_submission"].doc_id])
@@ -257,17 +258,17 @@ def comment_worker(comment_queue: Queue[CommentTask]):
 
 
 def main():
-    print("Starting Crypto Counter Bot...")
-    logger.info("Creating comments task queue...")
+    print("Starting Crypto Counter Bot.")
+    logger.info("Creating comments task queue.")
     comments_queue: Queue[CommentTask][CommentTask] = Queue()
-    logger.info("Starting database thread...")
+    logger.info("Starting database thread.")
     threading.Thread(target=analyze_database, args=(comments_queue, )).start()
-    logger.info("Starting comments thread...")
+    logger.info("Starting comments thread.")
     threading.Thread(target=analyze_comments, args=(comments_queue, )).start()
-    logger.info("Starting inbox thread...")
+    logger.info("Starting inbox thread.")
     threading.Thread(target=analyze_mentions, args=(comments_queue, )).start()
     # threading.Thread(target=analyze_submissions).start()
-    logger.info("Starting comment worker...")
+    logger.info("Starting comment worker.")
     threading.Thread(target=comment_worker, args=(comments_queue, ), daemon=True).start()
 
 
