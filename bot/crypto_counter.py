@@ -161,7 +161,7 @@ def analyze_submission(submission: Submission,
                 cg_coins_market_last_updated = datetime.now()
 
             logger.info("Analyzing submission: " + submission.id)
-            ranked, _ = analyze_submission_comments(submission, cg_coins_market)
+            ranked, _ = analyze_submission_comments(submission, cg_coins_market, [reddit.user.me()])
             coin_mentions = sum(count for _, count in ranked)
 
             top = 75 if coin_mentions > 75 else 50 if coin_mentions > 50 else 25 if coin_mentions > 25 else 10 if coin_mentions > 10 else min(

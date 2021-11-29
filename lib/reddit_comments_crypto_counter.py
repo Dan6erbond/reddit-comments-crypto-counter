@@ -4,14 +4,16 @@ from typing import List, Tuple, Union
 from english_words import english_words_lower_set
 from praw.models.comment_forest import CommentForest
 from praw.models.reddit.more import MoreComments
-from praw.reddit import Comment, Submission
+from praw.reddit import Comment, Submission, Redditor
 
 from .coingecko import *
 
 ticker_re = re.compile(r"\b([a-zA-Z]{2,5})\b")
 
 
-def analyze_comments(submission: Submission, cg_coins_list: List[Union[CoinMarket, Dict]] = None):
+def analyze_comments(submission: Submission,
+                     cg_coins_list: List[Union[CoinMarket, Dict]] = None,
+                     ignore_authors: List[Redditor] = list()):
     cg_dict = get_symbols_names_dict(cg_coins_list)
     comments: List[Union[Comment, MoreComments]] = submission.comments.list()
 
@@ -24,6 +26,8 @@ def analyze_comments(submission: Submission, cg_coins_list: List[Union[CoinMarke
         for comment in cs:
             tickers = set()
             if isinstance(comment, Comment):
+                if comment.author in ignore_authors:
+                    continue
                 comments_analyzed += 1
                 for match in ticker_re.finditer(comment.body):
                     ticker = match.group(1)
