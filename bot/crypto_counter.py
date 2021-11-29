@@ -84,9 +84,9 @@ def get_submission(submission_id: str) -> Document:
 
 
 @overload
-def create_submission(submission_id: str, return_submission: Literal[False]) -> None: .
+def create_submission(submission_id: str, return_submission: Literal[False]) -> None: ...
 @overload
-def create_submission(submission_id: str, return_submission: Literal[True]) -> Document: .
+def create_submission(submission_id: str, return_submission: Literal[True]) -> Document: ...
 
 
 def create_submission(submission_id: str, return_submission: bool = False) -> Union[None, Document]:
