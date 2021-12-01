@@ -5,8 +5,9 @@ import threading
 import time
 from datetime import datetime, timedelta
 from enum import Enum
+from functools import wraps
 from queue import Queue
-from typing import List, Literal, Union, overload
+from typing import Callable, List, Literal, TypeVar, Union, cast, overload
 
 import praw
 from lib import *
@@ -69,6 +70,27 @@ class CommentTask(TypedDict):
 class DocumentType(str, Enum):
     submission = "submission"
     comment = "comment"
+
+
+FuncT = TypeVar("FuncT", bound=Callable[..., Any])
+
+
+# Decorator that logs exceptions and restarts the function
+def error_handler(retry: bool = True, timeout: int = 0):
+    def inner(f: FuncT) -> FuncT:
+        @wraps(f)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            def start(*args: Any, **kwargs: Any) -> Any:
+                try:
+                    f(*args, **kwargs)
+                except Exception as e:
+                    logger.exception(e)
+                finally:
+                    time.sleep(timeout)
+                    if retry: start(*args, **kwargs)
+            start(*args, **kwargs)
+        return cast(FuncT, wrapper)
+    return inner
 
 
 def initialize_test():
@@ -223,6 +245,7 @@ def start_submission_thread(submission: Submission,
             parent_comment)).start()
 
 
+@error_handler(5 * 60)
 def analyze_comments(comments_queue: Queue[CommentTask]):
     for comment in subreddits.stream.comments(skip_existing=True):
         if any(mention.lower() in comment.body.lower()
@@ -230,6 +253,7 @@ def analyze_comments(comments_queue: Queue[CommentTask]):
             start_submission_thread(comment.submission, comments_queue, parent_comment=comment)
 
 
+@error_handler(5 * 60)
 def analyze_mentions(comments_queue: Queue[CommentTask]):
     for mention in reddit.inbox.stream(skip_existing=True):
         if isinstance(mention, Comment):
