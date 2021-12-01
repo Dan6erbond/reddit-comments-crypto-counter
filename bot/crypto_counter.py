@@ -35,13 +35,27 @@ stream_handler = logging.StreamHandler(sys.stdout)
 stream_handler.setLevel(logging.WARN)
 stream_handler.setFormatter(formatter)
 
+
+class LevelFilter(logging.Filter):
+    def __init__(self, level):
+        self.__level = level
+
+    def filter(self, log_record):
+        return log_record.levelno <= self.__level
+
+
 logger.addHandler(stream_handler)
 
-file_handler = logging.FileHandler("bot.txt", "a+", "utf-8")
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
+log_file_handler = logging.FileHandler("bot.log", "a+", "utf-8")
+log_file_handler.setLevel(logging.INFO)
+log_file_handler.setFormatter(formatter)
+logger.addHandler(log_file_handler)
+log_file_handler.addFilter(LevelFilter(logging.INFO))
 
-logger.addHandler(file_handler)
+error_file_handler = logging.FileHandler("bot.error", "a+", "utf-8")
+error_file_handler.setLevel(logging.INFO)
+error_file_handler.setFormatter(formatter)
+logger.addHandler(error_file_handler)
 
 cg_coins_market: List[CoinMarket] = None
 cg_coins_market_last_updated: datetime = None
@@ -87,7 +101,8 @@ def error_handler(retry: bool = True, timeout: int = 0):
                     logger.exception(e)
                 finally:
                     time.sleep(timeout)
-                    if retry: start(*args, **kwargs)
+                    if retry:
+                        start(*args, **kwargs)
             start(*args, **kwargs)
         return cast(FuncT, wrapper)
     return inner
